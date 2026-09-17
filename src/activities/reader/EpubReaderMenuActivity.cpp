@@ -9,6 +9,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "util/PluginEvents.h"
 #include "util/SlideSwitch.h"
@@ -65,6 +66,9 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
                                             const bool hasBookmarks, const bool hasClippings) {
   items.clear();
   items.reserve(MAX_MENU_ITEMS);
+  if (RECENT_BOOKS.getCount() > 1) {
+    items.push_back({MenuAction::PREVIOUS_BOOK, StrId::STR_PREVIOUS_BOOK});
+  }
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
