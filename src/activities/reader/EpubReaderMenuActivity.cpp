@@ -3,6 +3,7 @@
 #include <BlePageTurner.h>
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include "CrossPointSettings.h"
@@ -70,18 +71,20 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
     items.push_back({MenuAction::PREVIOUS_BOOK, StrId::STR_PREVIOUS_BOOK});
   }
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-  if (hasFootnotes) {
-    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+  if (!gpio.deviceIsX3()) {
+    if (hasFootnotes) {
+      items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+    }
+    if (hasBookmarks) {
+      items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
+    }
+    items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   }
-  if (hasBookmarks) {
-    items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
-  }
-  items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   items.push_back({MenuAction::SAVE_CLIPPING, StrId::STR_SAVE_CLIPPING});
   if (hasClippings) {
     items.push_back({MenuAction::VIEW_CLIPPINGS, StrId::STR_VIEW_CLIPPINGS});
   }
-  if (!slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) {
+  if (!gpio.deviceIsX3() && !slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) {
     items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
   }
   if (Frontlight.present() && !slideSwitchOwnsLight()) {
@@ -90,21 +93,25 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   if (bleturner::status().compiledIn && SETTINGS.ble.peerAddr[0] != '\0') {
     items.push_back({MenuAction::BLUETOOTH, StrId::STR_BT_PAGE_TURNER});
   }
-  if (SETTINGS.dictionaryName[0] != '\0') {
+  if (!gpio.deviceIsX3() && SETTINGS.dictionaryName[0] != '\0') {
     items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   }
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
-  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
-  items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
-  items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
-  bool canSync = KOREADER_STORE.hasCredentials();
-  for (size_t event = 0; !canSync && event < static_cast<size_t>(pluginevents::Event::COUNT); ++event) {
-    canSync = pluginevents::anySubscriber(static_cast<pluginevents::Event>(event));
+  if (!gpio.deviceIsX3()) {
+    items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   }
-  if (canSync) {
-    items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
+  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  if (!gpio.deviceIsX3()) {
+    items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
+    items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
+    items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
+    bool canSync = KOREADER_STORE.hasCredentials();
+    for (size_t event = 0; !canSync && event < static_cast<size_t>(pluginevents::Event::COUNT); ++event) {
+      canSync = pluginevents::anySubscriber(static_cast<pluginevents::Event>(event));
+    }
+    if (canSync) {
+      items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
+    }
   }
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
