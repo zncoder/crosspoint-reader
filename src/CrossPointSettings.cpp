@@ -1,18 +1,23 @@
 #include "CrossPointSettings.h"
 
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <string>
 
+#include "CrossPointState.h"
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
+#include "activities/ActivityManager.h"
 #include "fontIds.h"
 
 namespace {
@@ -90,11 +95,19 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonRight"] = frontButtonRight;
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
-  doc["fontFamily"] = fontFamily;
-  doc["fontSize"] = fontPointSize;
-  // SD card font family name — not in SettingsList, save manually
-  if (sdFontFamilyName[0] != '\0') {
-    doc["sdFontFamilyName"] = sdFontFamilyName;
+  if (savedGlobalFont) {
+    doc["fontFamily"] = savedGlobalFont->fontFamily;
+    doc["fontSize"] = savedGlobalFont->fontPointSize;
+    if (savedGlobalFont->sdFontFamilyName[0] != '\0') {
+      doc["sdFontFamilyName"] = savedGlobalFont->sdFontFamilyName;
+    }
+  } else {
+    doc["fontFamily"] = fontFamily;
+    doc["fontSize"] = fontPointSize;
+    // SD card font family name — not in SettingsList, save manually
+    if (sdFontFamilyName[0] != '\0') {
+      doc["sdFontFamilyName"] = sdFontFamilyName;
+    }
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
@@ -110,6 +123,86 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (keyboardLayouts != 0) {
     doc["keyboardLayouts"] = keyboardLayouts;
   }
+}
+
+std::array<char, 64> CrossPointSettings::getBookFontSettingPath() {
+  if (!activityManager.isReaderActivity()) return {};
+  return getBookFontSettingPath(APP_STATE.openEpubPath);
+}
+
+std::array<char, 64> CrossPointSettings::getBookFontSettingPath(const std::string& bookPath) {
+  std::array<char, 64> path{};
+  if (!bookPath.empty()) {
+    snprintf(path.data(), path.size(), "/.crosspoint/epub_%zu/font.json", std::hash<std::string>{}(bookPath));
+  }
+  return path;
+}
+
+bool CrossPointSettings::hasBookFont() {
+  const auto fontPath = getBookFontSettingPath();
+  return fontPath[0] != '\0' && Storage.exists(fontPath.data());
+}
+
+void CrossPointSettings::saveGlobalFont() {
+  if (savedGlobalFont) return;
+  savedGlobalFont.emplace(FontSettings{fontFamily, fontPointSize, {}});
+  copyToField(savedGlobalFont->sdFontFamilyName, sdFontFamilyName, sizeof(sdFontFamilyName));
+}
+
+bool CrossPointSettings::restoreGlobalFont() {
+  if (!savedGlobalFont) return false;
+  fontFamily = savedGlobalFont->fontFamily;
+  fontPointSize = savedGlobalFont->fontPointSize;
+  copyToField(sdFontFamilyName, savedGlobalFont->sdFontFamilyName, sizeof(sdFontFamilyName));
+  savedGlobalFont.reset();
+  return true;
+}
+
+bool CrossPointSettings::saveBookFont() {
+  const auto path = getBookFontSettingPath();
+  if (path[0] == '\0') {
+    LOG_ERR("CPS", "Cannot save font settings without an open book");
+    return false;
+  }
+  JsonDocument doc;
+  doc["fontFamily"] = fontFamily;
+  doc["fontSize"] = fontPointSize;
+  if (sdFontFamilyName[0] != '\0') doc["sdFontFamilyName"] = sdFontFamilyName;
+  if (doc.overflowed()) {
+    LOG_ERR("CPS", "OOM: font settings");
+    return false;
+  }
+  if (!writeDocToFile(path.data(), doc)) return false;
+  saveGlobalFont();
+  return true;
+}
+
+bool CrossPointSettings::loadBookFont(const std::string& bookPath) {
+  restoreGlobalFont();
+  const auto path = getBookFontSettingPath(bookPath);
+  if (path[0] == '\0' || !Storage.exists(path.data())) return false;
+  JsonDocument doc;
+  if (!readDocFromFile(path.data(), doc)) return false;
+  saveGlobalFont();
+
+  const JsonVariantConst storedFamily = doc["fontFamily"];
+  const JsonVariantConst storedSize = doc["fontSize"];
+  const JsonVariantConst storedSdFamily = doc["sdFontFamilyName"];
+  if (!storedFamily.is<uint8_t>() || storedFamily.as<uint8_t>() >= BUILTIN_FONT_COUNT || !storedSize.is<uint8_t>() ||
+      storedSize.as<uint8_t>() == 0 || (!storedSdFamily.isNull() && !storedSdFamily.is<const char*>())) {
+    LOG_ERR("CPS", "Invalid font settings in %s", path.data());
+    return false;
+  }
+  const char* sdFamily = storedSdFamily | "";
+  if (strlen(sdFamily) >= sizeof(sdFontFamilyName)) {
+    LOG_ERR("CPS", "Font family name too long in %s", path.data());
+    return false;
+  }
+
+  fontFamily = storedFamily.as<uint8_t>();
+  fontPointSize = storedSize.as<uint8_t>();
+  copyToField(sdFontFamilyName, sdFamily, sizeof(sdFontFamilyName));
+  return true;
 }
 
 bool CrossPointSettings::fromJson(JsonVariantConst doc) {

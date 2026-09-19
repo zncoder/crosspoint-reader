@@ -4,12 +4,25 @@
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
 
+#include <array>
 #include <cstdint>
+#include <optional>
+#include <string>
 
 #include "util/HomeButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
+  struct FontSettings {
+    uint8_t fontFamily;
+    uint8_t fontPointSize;
+    char sdFontFamilyName[32];
+  };
+  // Preserve the global selection while the public font fields hold a book override.
+  std::optional<FontSettings> savedGlobalFont;
+  void saveGlobalFont();
+  static std::array<char, 64> getBookFontSettingPath(const std::string& bookPath);
+
   // Private constructor for singleton
   CrossPointSettings() = default;
 
@@ -414,6 +427,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static const char* getFilePath() { return "/.crosspoint/settings.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
+  static std::array<char, 64> getBookFontSettingPath();
+  static bool hasBookFont();
+  bool saveBookFont();
+  bool loadBookFont(const std::string& bookPath);
+  bool restoreGlobalFont();
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);

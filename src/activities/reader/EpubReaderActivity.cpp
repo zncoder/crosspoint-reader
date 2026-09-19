@@ -1883,6 +1883,7 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
         if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
         SETTINGS.fontPointSize = sizes[idx];
         applyTextSettingLive();
+        if (SETTINGS.hasBookFont()) SETTINGS.saveBookFont();
       });
       break;
     }

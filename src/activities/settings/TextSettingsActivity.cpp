@@ -1,6 +1,7 @@
 #include "TextSettingsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -27,7 +28,7 @@ constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_L
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {StrId::STR_LINE_SPACING, StrId::STR_EXTRA_SPACING, StrId::STR_ALIGNMENT,
                                          StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
-                                        StrId::STR_TEXT_AA};
+                                        StrId::STR_TEXT_AA, StrId::STR_CUSTOM_FONT_FOR_THIS_BOOK};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -336,6 +337,7 @@ void TextSettingsActivity::activateRow(int row) {
         // SD write happens outside its RenderLock.
         if (currentFamilyIndex_ == row) {
           SETTINGS.saveToFile();
+          if (SETTINGS.hasBookFont()) SETTINGS.saveBookFont();
         }
         requestUpdate();
       }
@@ -344,6 +346,7 @@ void TextSettingsActivity::activateRow(int row) {
       if (row != currentSizeIndex_) {
         applySize(row);
         SETTINGS.saveToFile();
+        if (SETTINGS.hasBookFont()) SETTINGS.saveBookFont();
         requestUpdate();
       }
       break;
@@ -443,6 +446,29 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
       break;
+    case StyleRow::CustomBookFont: {
+      const auto fontPath = SETTINGS.getBookFontSettingPath();
+      if (fontPath[0] == '\0') return;
+      // Toggle book font
+      if (SETTINGS.hasBookFont()) {
+        if (!Storage.remove(fontPath.data())) {
+          LOG_ERR("TXTSET", "Failed to remove %s", fontPath.data());
+          return;
+        }
+        RenderLock lock;
+        if (SETTINGS.restoreGlobalFont()) {
+          sdFontSystem.ensureLoaded(renderer);
+          currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+          rebuildSizeList();
+          tabNavs[static_cast<int>(Tab::Family)].selected = currentFamilyIndex_ + 1;
+          tabNavs[static_cast<int>(Tab::Size)].selected = currentSizeIndex_ + 1;
+        }
+      } else {
+        SETTINGS.saveBookFont();
+      }
+      requestUpdate();
+      return;
+    }
 
     default:
       return;
@@ -461,6 +487,8 @@ std::string TextSettingsActivity::styleValueText(int row) const {
       return SETTINGS.embeddedStyle ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::AntiAliasing:
       return SETTINGS.textAntiAliasing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case StyleRow::CustomBookFont:
+      return SETTINGS.hasBookFont() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
 
     default:
       return "";
@@ -472,7 +500,8 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
+  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing ||
+         row == StyleRow::CustomBookFont;
 }
 
 void TextSettingsActivity::switchTab(const int direction) {
@@ -495,7 +524,7 @@ int TextSettingsActivity::listCount() const {
     case Tab::Layout:
       return static_cast<int>(LayoutRow::Count);
     case Tab::Style:
-      return static_cast<int>(StyleRow::Count);
+      return static_cast<int>(StyleRow::Count) - (activityManager.isReaderActivity() ? 0 : 1);
 
     default:
       return 0;

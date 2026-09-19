@@ -55,6 +55,7 @@ void ReaderActivity::onEnter() {
     return;
   }
 
+  SETTINGS.loadBookFont(bookPath);
   sdFontSystem.ensureLoaded(renderer);
   applyInitialOrientation();
 
@@ -72,6 +73,7 @@ void ReaderActivity::onEnter() {
 void ReaderActivity::onExit() {
   Activity::onExit();
 
+  if (SETTINGS.restoreGlobalFont()) sdFontSystem.ensureLoaded(renderer);
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
