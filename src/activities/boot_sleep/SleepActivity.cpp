@@ -1121,14 +1121,7 @@ void SleepActivity::renderLastScreenSleepScreen() const {
       radius > 0 ? static_cast<int>(std::ceil(radius - std::sqrt(static_cast<float>(radius * radius - d * d)))) : 0;
   renderer.drawImage(MoonIcon, std::max(left, intrusion), renderer.getScreenHeight() - bottom - MOONICON_HEIGHT,
                      MOONICON_WIDTH, MOONICON_HEIGHT);
-  // Only the moon differs from the displayed frame, so a differential FAST
-  // update adds it without the flashing clean pass (which sweeps the panel
-  // through the inverse — a full white flash on a night-mode page).
-  if (gpio.deviceIsX3()) {
-    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-  } else {
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-  }
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
