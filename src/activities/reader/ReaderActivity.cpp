@@ -73,6 +73,7 @@ void ReaderActivity::onEnter() {
     APP_STATE.saveToFile();
   }
 
+  SETTINGS.loadBookFont(bookPath);
   sdFontSystem.ensureLoaded(renderer);
   applyInitialOrientation();
 
@@ -99,6 +100,8 @@ void ReaderActivity::onExit() {
 
   // The first page can finish rendering after the last reader loop.
   rememberBookOnceRendered();
+
+  if (SETTINGS.restoreGlobalFont()) sdFontSystem.ensureLoaded(renderer);
 
   // Keep rebuildable font buffers from pinning the heap between reading sessions.
   if (auto* fontCache = renderer.getFontCacheManager()) {

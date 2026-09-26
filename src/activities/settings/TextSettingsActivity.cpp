@@ -349,7 +349,11 @@ void TextSettingsActivity::activateRow(int row) {
         // gesture/key or a sleep. Saved here, not inside applyFamily, so the
         // SD write happens outside its RenderLock.
         if (currentFamilyIndex_ == row) {
-          SETTINGS.saveToFile();
+          if (activityManager.isReaderActivity()) {
+            SETTINGS.saveBookFont();
+          } else {
+            SETTINGS.saveToFile();
+          }
         }
         requestUpdate();
       }
@@ -357,7 +361,11 @@ void TextSettingsActivity::activateRow(int row) {
     case Tab::Size:
       if (row != currentSizeIndex_) {
         applySize(row);
-        SETTINGS.saveToFile();
+        if (activityManager.isReaderActivity()) {
+          SETTINGS.saveBookFont();
+        } else {
+          SETTINGS.saveToFile();
+        }
         requestUpdate();
       }
       break;
@@ -497,7 +505,6 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
       break;
-
     default:
       return;
   }
