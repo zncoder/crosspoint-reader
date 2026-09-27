@@ -33,7 +33,7 @@ bool XtcReaderActivity::loadBook() {
 }
 
 void XtcReaderActivity::openChapterSelection() {
-  if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+  if (xtc) {
     startActivityForResult(std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {

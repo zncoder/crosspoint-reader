@@ -2,11 +2,13 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <vector>
 
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -39,17 +41,22 @@ void XtcReaderChapterSelectionActivity::onEnter() {
 
   buildRowItems();
 
-  // Open on the current chapter, which may sit past the first page; the first
-  // screen build pulls the viewport to it (ListNav follow-on-build).
-  nav.selected = findChapterIndexForPage(currentPage);
+  nav.selected = 0;
 }
 
 // Derives rowItems from the xtc's chapters. Called once from onEnter() since
 // chapters are static for this screen's lifetime.
 void XtcReaderChapterSelectionActivity::buildRowItems() {
   const auto& chapters = xtc->getChapters();
+  const bool hasPreviousBook = RECENT_BOOKS.getCount() > 1;
   rowItems.clear();
-  rowItems.reserve(chapters.size());
+  rowItems.reserve(chapters.size() + (hasPreviousBook ? 1 : 0));
+  if (hasPreviousBook) {
+    fui::ListItem item;
+    item.label = tr(STR_PREVIOUS_BOOK);
+    item.actionValue = 0;
+    rowItems.push_back(item);
+  }
   for (const auto& chapter : chapters) {
     fui::ListItem item;
     item.label = chapter.name.empty() ? tr(STR_UNNAMED) : chapter.name.c_str();
@@ -59,13 +66,35 @@ void XtcReaderChapterSelectionActivity::buildRowItems() {
 }
 
 void XtcReaderChapterSelectionActivity::activateIndex(const int index) {
+  if (!xtc || index < 0 || index >= listCount()) {
+    return;
+  }
+
+  const auto& chapters = xtc->getChapters();
+  const bool hasPreviousBook = rowItems.size() > chapters.size();
+
   // The activated row leaves this screen (finish); a lingering flash would
   // gray an unrelated element on the next render.
   app.clearTapFlash();
-  const auto& chapters = xtc->getChapters();
-  if (!chapters.empty() && index >= 0 && index < static_cast<int>(chapters.size())) {
+  if (hasPreviousBook && index == 0) {
+    if (RECENT_BOOKS.pruneMissing()) {
+      RECENT_BOOKS.saveToFile();
+    }
+    for (const auto& book : RECENT_BOOKS.getBooks()) {
+      if (book.path != xtc->getPath()) {
+        onSelectBook(book.path);
+        return;
+      }
+    }
+    LOG_DBG("XTR", "No previous book available");
+    requestUpdate();
+    return;
+  }
+
+  const int chapterIndex = index - (hasPreviousBook ? 1 : 0);
+  if (chapterIndex >= 0 && chapterIndex < static_cast<int>(chapters.size())) {
     nav.selected = index;
-    setResult(PageResult{chapters[index].startPage});
+    setResult(PageResult{chapters[chapterIndex].startPage});
     finish();
   }
 }
