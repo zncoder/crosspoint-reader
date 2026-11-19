@@ -23,6 +23,7 @@
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
 #include <esp_heap_caps.h>
+#include <esp_system.h>
 #include <esp_wifi.h>
 #include <time.h>
 
@@ -851,6 +852,44 @@ void setup() {
   allowSleepAt = millis() + (isSilentReboot ? 0 : 2000);
 }
 
+static void logBattery() {
+  if (!gpio.deviceIsX3()) return;
+
+  if (Storage.sdTotalBytes() == 0) return;
+
+  BatteryMonitor::Status status;
+  {
+    RenderLock lock;
+    status = powerManager.getBatteryStatus();
+  }
+  auto sampleMs = millis();
+  if (!status.millivoltsKnown || !status.percentageKnown) {
+    LOG_ERR("BAT", "Incomplete battery telemetry");
+  }
+
+  auto file = Storage.open("/battery-debug.csv", O_WRONLY | O_CREAT | O_APPEND);
+  if (!file) {
+    LOG_ERR("BAT", "Failed to open /battery-debug.csv");
+    return;
+  }
+  auto header = "sample_ms,millivolts,percent,charging,reset_reason\n";
+  auto headerLength = strlen(header);
+  if (file.size() == 0 && file.write(header, headerLength) != headerLength) {
+    LOG_ERR("BAT", "Failed to write battery log header");
+    return;
+  }
+  char row[96];
+  auto length =
+      snprintf(row, sizeof(row), "%lu,%d,%d,%d,%d\n", sampleMs,
+               status.millivoltsKnown ? static_cast<int>(status.millivolts) : -1,
+               status.percentageKnown ? static_cast<int>(status.percentage) : -1,
+               status.chargingKnown ? static_cast<int>(status.charging) : -1, static_cast<int>(esp_reset_reason()));
+  if (length <= 0 || static_cast<size_t>(length) >= sizeof(row) ||
+      file.write(row, static_cast<size_t>(length)) != static_cast<size_t>(length)) {
+    LOG_ERR("BAT", "Failed to write battery log row");
+  }
+}
+
 void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
@@ -893,6 +932,12 @@ void loop() {
     }
     return;
   }
+
+  static unsigned long lastBatteryLogMs = 0;
+  auto batteryLogNow = millis();
+  auto batteryLogDue = batteryLogNow - lastBatteryLogMs >= 60000;
+  if (batteryLogDue) lastBatteryLogMs = batteryLogNow;
+  if (batteryLogDue || gpio.wasAnyPressed()) logBattery();
 
   // After the exclusive-storage return: it saves settings to the SD card.
   handleSlideSwitch();
