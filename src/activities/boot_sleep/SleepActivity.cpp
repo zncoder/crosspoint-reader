@@ -1113,14 +1113,9 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   int top, right, bottom, left;
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
-  // Clear the rounded bottom corner too: how far its arc cuts in at the icon's bottom row.
-  const int radius = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
-                                                                 : BoardConfig::ACTIVE.cornerRadius;
-  const int d = std::max(0, radius - bottom);
-  const int intrusion =
-      radius > 0 ? static_cast<int>(std::ceil(radius - std::sqrt(static_cast<float>(radius * radius - d * d)))) : 0;
-  renderer.drawImage(MoonIcon, std::max(left, intrusion), renderer.getScreenHeight() - bottom - MOONICON_HEIGHT,
-                     MOONICON_WIDTH, MOONICON_HEIGHT);
+  const int iconX = left + (renderer.getScreenWidth() - left - right - MOONICON_WIDTH) / 2;
+  renderer.drawImage(MoonIcon, iconX, renderer.getScreenHeight() - bottom - MOONICON_HEIGHT, MOONICON_WIDTH,
+                     MOONICON_HEIGHT);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
